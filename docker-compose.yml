@@ -58,8 +58,8 @@ services:
       context: .
       dockerfile: ./client/Dockerfile
       args:
-      VITE_API_URL: ${VITE_API_URL:-https://api.openfamilly.victorprouff.fr} #localhost:3001
-        VITE_WS_URL: ${VITE_WS_URL:-ws://api.openfamilly.victorprouff.fr} # localhost:3001
+      VITE_API_URL: ${VITE_API_URL:-https://api.openfamilly.victorprouff.fr}
+        VITE_WS_URL: ${VITE_WS_URL:-ws://api.openfamilly.victorprouff.fr}
     container_name: openfamily-client
     restart: unless-stopped
     expose:
