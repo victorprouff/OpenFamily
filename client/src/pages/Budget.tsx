@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Plus, TrendingUp, TrendingDown, DollarSign, Edit2, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, Edit2, Trash2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Dialog, Input, Select, Textarea, Badge, Tabs } from '../components/ui';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
@@ -73,8 +73,8 @@ const Budget: React.FC = () => {
     const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
     const [formError, setFormError] = useState('');
     const [limitError, setLimitError] = useState('');
-    const [currentMonth] = useState(new Date().getMonth() + 1);
-    const [currentYear] = useState(new Date().getFullYear());
+    const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
+    const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
     const [filterMemberId, setFilterMemberId] = useState('');
 
     const [formData, setFormData] = useState({
@@ -92,11 +92,14 @@ const Budget: React.FC = () => {
     });
 
     useEffect(() => {
-        loadEntries();
-        loadLimits();
-        loadStats();
         loadFamilyMembers();
     }, []);
+
+    useEffect(() => {
+        loadEntries(filterMemberId, currentMonth, currentYear);
+        loadLimits(currentMonth, currentYear);
+        loadStats(currentMonth, currentYear);
+    }, [currentMonth, currentYear]);
 
     const loadFamilyMembers = async () => {
         try {
@@ -109,10 +112,10 @@ const Budget: React.FC = () => {
         }
     };
 
-    const loadEntries = async (memberId = filterMemberId) => {
+    const loadEntries = async (memberId = filterMemberId, month = currentMonth, year = currentYear) => {
         try {
-            const startDate = new Date(currentYear, currentMonth - 1, 1).toISOString().split('T')[0];
-            const endDate = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
+            const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
+            const endDate = new Date(year, month, 0).toISOString().split('T')[0];
             const memberParam = memberId ? `&family_member_id=${memberId}` : '';
             const response = await api.get<{ success: boolean; data: BudgetEntry[] }>(
                 `/api/budget/entries?start_date=${startDate}&end_date=${endDate}${memberParam}`
@@ -130,10 +133,10 @@ const Budget: React.FC = () => {
         }
     };
 
-    const loadLimits = async () => {
+    const loadLimits = async (month = currentMonth, year = currentYear) => {
         try {
             const response = await api.get<{ success: boolean; data: BudgetLimit[] }>(
-                `/api/budget/limits?month=${currentMonth}&year=${currentYear}`
+                `/api/budget/limits?month=${month}&year=${year}`
             );
             if (response.success) {
                 setLimits(response.data.map((limit) => ({
@@ -148,10 +151,10 @@ const Budget: React.FC = () => {
         }
     };
 
-    const loadStats = async () => {
+    const loadStats = async (month = currentMonth, year = currentYear) => {
         try {
             const response = await api.get<{ success: boolean; data: BudgetStats }>(
-                `/api/budget/statistics?month=${currentMonth}&year=${currentYear}`
+                `/api/budget/statistics?month=${month}&year=${year}`
             );
             if (response.success) {
                 setStats({
@@ -270,7 +273,16 @@ const Budget: React.FC = () => {
 
     const handleFilterMember = (memberId: string) => {
         setFilterMemberId(memberId);
-        loadEntries(memberId);
+        loadEntries(memberId, currentMonth, currentYear);
+    };
+
+    const navigateMonth = (direction: -1 | 1) => {
+        let newMonth = currentMonth + direction;
+        let newYear = currentYear;
+        if (newMonth < 1) { newMonth = 12; newYear -= 1; }
+        if (newMonth > 12) { newMonth = 1; newYear += 1; }
+        setCurrentMonth(newMonth);
+        setCurrentYear(newYear);
     };
 
     const resetLimitForm = () => {
@@ -314,9 +326,17 @@ const Budget: React.FC = () => {
             content: (
                 <div className="space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <h3 className="text-h2 font-semibold">
-                            {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy', { locale: fr })}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => navigateMonth(-1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
+                                <ChevronLeft className="w-5 h-5" />
+                            </button>
+                            <h3 className="text-h2 font-semibold min-w-[160px] text-center">
+                                {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy', { locale: fr })}
+                            </h3>
+                            <button onClick={() => navigateMonth(1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
+                                <ChevronRight className="w-5 h-5" />
+                            </button>
+                        </div>
                         <div className="flex items-center gap-2 flex-wrap">
                             {familyMembers.length > 0 && (
                                 <div className="flex items-center gap-1">
