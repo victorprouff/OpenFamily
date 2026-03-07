@@ -122,6 +122,9 @@ export interface BudgetEntry extends BaseEntity {
     description?: string;
     date: Date;
     is_expense: boolean; // true for expense, false for income
+    family_member_id?: string;
+    family_member_name?: string;
+    family_member_color?: string;
 }
 
 // Budget Limit
