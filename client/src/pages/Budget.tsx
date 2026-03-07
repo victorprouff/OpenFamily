@@ -7,6 +7,12 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { CHART_COLOR_PRESETS } from '../design/colorPresets';
 
+interface FamilyMember {
+    id: string;
+    name: string;
+    color: string;
+}
+
 interface BudgetEntry {
     id: string;
     category: string;
@@ -14,6 +20,9 @@ interface BudgetEntry {
     description?: string;
     date: string;
     is_expense: boolean;
+    family_member_id?: string;
+    family_member_name?: string;
+    family_member_color?: string;
 }
 
 interface BudgetLimit {
@@ -29,6 +38,7 @@ interface BudgetStats {
     totalIncome: number;
     balance: number;
     byCategory: Array<{ category: string; category_total: number }>;
+    byMember: Array<{ family_member_id: string; family_member_name: string; family_member_color: string; member_total: number }>;
 }
 
 const CATEGORIES = [
@@ -56,6 +66,7 @@ const Budget: React.FC = () => {
     const [entries, setEntries] = useState<BudgetEntry[]>([]);
     const [limits, setLimits] = useState<BudgetLimit[]>([]);
     const [stats, setStats] = useState<BudgetStats | null>(null);
+    const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [limitDialogOpen, setLimitDialogOpen] = useState(false);
@@ -64,6 +75,7 @@ const Budget: React.FC = () => {
     const [limitError, setLimitError] = useState('');
     const [currentMonth] = useState(new Date().getMonth() + 1);
     const [currentYear] = useState(new Date().getFullYear());
+    const [filterMemberId, setFilterMemberId] = useState('');
 
     const [formData, setFormData] = useState({
         category: 'Alimentation',
@@ -71,6 +83,7 @@ const Budget: React.FC = () => {
         description: '',
         date: format(new Date(), 'yyyy-MM-dd'),
         is_expense: true,
+        family_member_id: '',
     });
 
     const [limitFormData, setLimitFormData] = useState({
@@ -82,14 +95,27 @@ const Budget: React.FC = () => {
         loadEntries();
         loadLimits();
         loadStats();
+        loadFamilyMembers();
     }, []);
 
-    const loadEntries = async () => {
+    const loadFamilyMembers = async () => {
+        try {
+            const response = await api.get<{ success: boolean; data: FamilyMember[] }>('/api/family');
+            if (response.success) {
+                setFamilyMembers(response.data);
+            }
+        } catch (error) {
+            console.error('Failed to load family members:', error);
+        }
+    };
+
+    const loadEntries = async (memberId = filterMemberId) => {
         try {
             const startDate = new Date(currentYear, currentMonth - 1, 1).toISOString().split('T')[0];
             const endDate = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
+            const memberParam = memberId ? `&family_member_id=${memberId}` : '';
             const response = await api.get<{ success: boolean; data: BudgetEntry[] }>(
-                `/api/budget/entries?start_date=${startDate}&end_date=${endDate}`
+                `/api/budget/entries?start_date=${startDate}&end_date=${endDate}${memberParam}`
             );
             if (response.success) {
                 setEntries(response.data.map((entry) => ({
@@ -137,6 +163,10 @@ const Budget: React.FC = () => {
                         category: item.category,
                         category_total: toNumber(item.category_total),
                     })),
+                    byMember: (response.data.byMember || []).map((item) => ({
+                        ...item,
+                        member_total: toNumber(item.member_total),
+                    })),
                 });
             }
         } catch (error) {
@@ -157,6 +187,7 @@ const Budget: React.FC = () => {
             const payload = {
                 ...formData,
                 amount: parsedAmount,
+                family_member_id: formData.family_member_id || null,
             };
 
             if (editingEntry) {
@@ -164,6 +195,7 @@ const Budget: React.FC = () => {
             } else {
                 await api.post('/api/budget/entries', payload);
             }
+
             setDialogOpen(false);
             resetForm();
             loadEntries();
@@ -218,6 +250,7 @@ const Budget: React.FC = () => {
             description: entry.description || '',
             date: entry.date.split('T')[0],
             is_expense: entry.is_expense,
+            family_member_id: entry.family_member_id || '',
         });
         setDialogOpen(true);
     };
@@ -231,7 +264,13 @@ const Budget: React.FC = () => {
             description: '',
             date: format(new Date(), 'yyyy-MM-dd'),
             is_expense: true,
+            family_member_id: '',
         });
+    };
+
+    const handleFilterMember = (memberId: string) => {
+        setFilterMemberId(memberId);
+        loadEntries(memberId);
     };
 
     const resetLimitForm = () => {
@@ -274,14 +313,36 @@ const Budget: React.FC = () => {
             label: 'Entrées',
             content: (
                 <div className="space-y-4">
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <h3 className="text-h2 font-semibold">
                             {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy', { locale: fr })}
                         </h3>
-                        <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
-                            <Plus className="w-4 h-4 mr-2" />
-                            Nouvelle entrée
-                        </Button>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {familyMembers.length > 0 && (
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => handleFilterMember('')}
+                                        className={`px-3 py-1 rounded-full text-body-sm font-medium transition-colors ${filterMemberId === '' ? 'bg-nexus-blue text-white' : 'bg-surface-2 text-muted-foreground hover:bg-surface-3'}`}
+                                    >
+                                        Tous
+                                    </button>
+                                    {familyMembers.map((m) => (
+                                        <button
+                                            key={m.id}
+                                            onClick={() => handleFilterMember(m.id)}
+                                            className={`px-3 py-1 rounded-full text-body-sm font-medium transition-colors ${filterMemberId === m.id ? 'text-white' : 'text-muted-foreground hover:opacity-80'}`}
+                                            style={filterMemberId === m.id ? { backgroundColor: m.color } : { backgroundColor: `${m.color}33` }}
+                                        >
+                                            {m.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
+                                <Plus className="w-4 h-4 mr-2" />
+                                Nouvelle entrée
+                            </Button>
+                        </div>
                     </div>
 
                     <div className="space-y-3">
@@ -298,10 +359,18 @@ const Budget: React.FC = () => {
                                     <CardContent className="p-4">
                                         <div className="flex items-start justify-between">
                                             <div className="flex-1">
-                                                <div className="flex items-center gap-3 mb-1">
+                                                <div className="flex items-center gap-2 mb-1 flex-wrap">
                                                     <Badge variant={entry.is_expense ? 'danger' : 'success'}>
                                                         {entry.category}
                                                     </Badge>
+                                                    {entry.family_member_name && (
+                                                        <span
+                                                            className="text-label px-2 py-0.5 rounded-full text-white"
+                                                            style={{ backgroundColor: entry.family_member_color || '#6B7280' }}
+                                                        >
+                                                            {entry.family_member_name}
+                                                        </span>
+                                                    )}
                                                     <span className="text-label text-muted-foreground">
                                                         {format(new Date(entry.date), 'dd MMM yyyy', { locale: fr })}
                                                     </span>
@@ -433,6 +502,28 @@ const Budget: React.FC = () => {
                                         </CardContent>
                                     </Card>
                                 </div>
+                            )}
+                            {stats.byMember && stats.byMember.length > 0 && (
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Dépenses par membre</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={stats.byMember.map((m) => ({ name: m.family_member_name, montant: m.member_total, color: m.family_member_color }))}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="name" />
+                                                <YAxis />
+                                                <Tooltip />
+                                                <Bar dataKey="montant">
+                                                    {stats.byMember.map((m) => (
+                                                        <Cell key={m.family_member_id} fill={m.family_member_color} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </CardContent>
+                                </Card>
                             )}
                         </>
                     )}
@@ -579,6 +670,19 @@ const Budget: React.FC = () => {
                         placeholder="Détails..."
                         rows={2}
                     />
+                    {familyMembers.length > 0 && (
+                        <div>
+                            <label className="block text-label font-medium text-foreground mb-1.5">Membre (optionnel)</label>
+                            <Select
+                                value={formData.family_member_id}
+                                onValueChange={(value) => setFormData({ ...formData, family_member_id: value })}
+                                options={[
+                                    { value: '', label: 'Aucun' },
+                                    ...familyMembers.map((m) => ({ value: m.id, label: m.name })),
+                                ]}
+                            />
+                        </div>
+                    )}
                     <div className="flex justify-end gap-3 pt-4">
                         <Button type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
                             Annuler

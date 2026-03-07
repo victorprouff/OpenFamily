@@ -33,27 +33,36 @@ const mapBudgetLimit = (row: any) => ({
 // Get budget entries
 router.get('/entries', async (req: AuthRequest, res) => {
     try {
-        const { start_date, end_date, category } = req.query;
+        const { start_date, end_date, category, family_member_id } = req.query;
 
-        let queryText = 'SELECT * FROM budget_entries WHERE user_id = $1';
+        let queryText = `
+            SELECT be.*, fm.name as family_member_name, fm.color as family_member_color
+            FROM budget_entries be
+            LEFT JOIN family_members fm ON be.family_member_id = fm.id
+            WHERE be.user_id = $1`;
         const params: any[] = [req.userId];
 
         if (start_date) {
             params.push(start_date);
-            queryText += ` AND date >= $${params.length}`;
+            queryText += ` AND be.date >= $${params.length}`;
         }
 
         if (end_date) {
             params.push(end_date);
-            queryText += ` AND date <= $${params.length}`;
+            queryText += ` AND be.date <= $${params.length}`;
         }
 
         if (category) {
             params.push(category);
-            queryText += ` AND category = $${params.length}`;
+            queryText += ` AND be.category = $${params.length}`;
         }
 
-        queryText += ' ORDER BY date DESC';
+        if (family_member_id) {
+            params.push(family_member_id);
+            queryText += ` AND be.family_member_id = $${params.length}`;
+        }
+
+        queryText += ' ORDER BY be.date DESC';
 
         const result = await query(queryText, params);
         res.json({ success: true, data: result.rows.map(mapBudgetEntry) });
@@ -66,7 +75,7 @@ router.get('/entries', async (req: AuthRequest, res) => {
 // Create budget entry
 router.post('/entries', async (req: AuthRequest, res) => {
     try {
-        const { category, amount, description, date, is_expense } = req.body;
+        const { category, amount, description, date, is_expense, family_member_id } = req.body;
         const parsedAmount = toOptionalNumber(amount);
 
         if (!category || parsedAmount === null || !date) {
@@ -74,9 +83,9 @@ router.post('/entries', async (req: AuthRequest, res) => {
         }
 
         const result = await query(
-            `INSERT INTO budget_entries (user_id, category, amount, description, date, is_expense)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [req.userId, category, parsedAmount, toNullIfEmpty(description), date, Boolean(is_expense)]
+            `INSERT INTO budget_entries (user_id, category, amount, description, date, is_expense, family_member_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            [req.userId, category, parsedAmount, toNullIfEmpty(description), date, Boolean(is_expense), toNullIfEmpty(family_member_id)]
         );
 
         res.json({ success: true, data: mapBudgetEntry(result.rows[0]) });
@@ -90,7 +99,7 @@ router.post('/entries', async (req: AuthRequest, res) => {
 router.put('/entries/:id', async (req: AuthRequest, res) => {
     try {
         const { id } = req.params;
-        const { category, amount, description, date, is_expense } = req.body;
+        const { category, amount, description, date, is_expense, family_member_id } = req.body;
         const parsedAmount = amount !== undefined ? toOptionalNumber(amount) : undefined;
 
         if (amount !== undefined && parsedAmount === null) {
@@ -98,12 +107,13 @@ router.put('/entries/:id', async (req: AuthRequest, res) => {
         }
 
         const result = await query(
-            `UPDATE budget_entries 
+            `UPDATE budget_entries
        SET category = COALESCE($1, category),
            amount = COALESCE($2, amount),
            description = COALESCE($3, description),
            date = COALESCE($4, date),
-           is_expense = COALESCE($5, is_expense)
+           is_expense = COALESCE($5, is_expense),
+           family_member_id = $8
        WHERE id = $6 AND user_id = $7 RETURNING *`,
             [
                 toNullIfEmpty(category),
@@ -113,6 +123,7 @@ router.put('/entries/:id', async (req: AuthRequest, res) => {
                 is_expense !== undefined ? Boolean(is_expense) : undefined,
                 id,
                 req.userId,
+                family_member_id !== undefined ? toNullIfEmpty(family_member_id) : undefined,
             ]
         );
 
@@ -213,26 +224,42 @@ router.get('/statistics', async (req: AuthRequest, res) => {
             return res.status(400).json({ success: false, error: 'month and year are required' });
         }
 
-        const result = await query(
-            `SELECT 
+        const byCategory = await query(
+            `SELECT
          category,
          SUM(amount) as category_total
-       FROM budget_entries 
-       WHERE user_id = $1 
+       FROM budget_entries
+       WHERE user_id = $1
          AND is_expense = true
-         AND EXTRACT(MONTH FROM date) = $2 
+         AND EXTRACT(MONTH FROM date) = $2
          AND EXTRACT(YEAR FROM date) = $3
        GROUP BY category`,
             [req.userId, parsedMonth, parsedYear]
         );
 
+        const byMember = await query(
+            `SELECT
+         fm.id as family_member_id,
+         fm.name as family_member_name,
+         fm.color as family_member_color,
+         SUM(be.amount) as member_total
+       FROM budget_entries be
+       INNER JOIN family_members fm ON be.family_member_id = fm.id
+       WHERE be.user_id = $1
+         AND be.is_expense = true
+         AND EXTRACT(MONTH FROM be.date) = $2
+         AND EXTRACT(YEAR FROM be.date) = $3
+       GROUP BY fm.id, fm.name, fm.color`,
+            [req.userId, parsedMonth, parsedYear]
+        );
+
         const totals = await query(
-            `SELECT 
+            `SELECT
          SUM(amount) FILTER (WHERE is_expense = true) as total_expenses,
          SUM(amount) FILTER (WHERE is_expense = false) as total_income
-       FROM budget_entries 
-       WHERE user_id = $1 
-         AND EXTRACT(MONTH FROM date) = $2 
+       FROM budget_entries
+       WHERE user_id = $1
+         AND EXTRACT(MONTH FROM date) = $2
          AND EXTRACT(YEAR FROM date) = $3`,
             [req.userId, parsedMonth, parsedYear]
         );
@@ -246,9 +273,15 @@ router.get('/statistics', async (req: AuthRequest, res) => {
                 totalExpenses,
                 totalIncome,
                 balance: totalIncome - totalExpenses,
-                byCategory: result.rows.map((row) => ({
+                byCategory: byCategory.rows.map((row) => ({
                     category: row.category,
                     category_total: toNumber(row.category_total),
+                })),
+                byMember: byMember.rows.map((row) => ({
+                    family_member_id: row.family_member_id,
+                    family_member_name: row.family_member_name,
+                    family_member_color: row.family_member_color,
+                    member_total: toNumber(row.member_total),
                 })),
             }
         });
