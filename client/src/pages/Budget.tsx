@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Plus, TrendingUp, TrendingDown, DollarSign, Edit2, Trash2, AlertCircle, Users } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, Edit2, Trash2, AlertCircle, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Dialog, Input, Select, Textarea, Badge, Tabs } from '../components/ui';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
@@ -82,8 +82,8 @@ const Budget: React.FC = () => {
     const [formError, setFormError] = useState('');
     const [limitError, setLimitError] = useState('');
     const [filterMember, setFilterMember] = useState<string>('');
-    const [currentMonth] = useState(new Date().getMonth() + 1);
-    const [currentYear] = useState(new Date().getFullYear());
+    const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
+    const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
     const [formData, setFormData] = useState({
         category: 'Alimentation',
@@ -100,11 +100,14 @@ const Budget: React.FC = () => {
     });
 
     useEffect(() => {
+        loadFamilyMembers();
+    }, []);
+
+    useEffect(() => {
         loadEntries();
         loadLimits();
         loadStats();
-        loadFamilyMembers();
-    }, []);
+    }, [currentMonth, currentYear]);
 
     const loadEntries = async () => {
         try {
@@ -184,6 +187,15 @@ const Budget: React.FC = () => {
         }
     };
 
+    const navigateMonth = (direction: -1 | 1) => {
+        let newMonth = currentMonth + direction;
+        let newYear = currentYear;
+        if (newMonth < 1) { newMonth = 12; newYear -= 1; }
+        if (newMonth > 12) { newMonth = 1; newYear += 1; }
+        setCurrentMonth(newMonth);
+        setCurrentYear(newYear);
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError('');
@@ -210,7 +222,7 @@ const Budget: React.FC = () => {
             loadStats();
         } catch (error) {
             console.error('Failed to save entry:', error);
-            setFormError(error instanceof Error ? error.message : 'Impossible d’enregistrer cette entrée.');
+            setFormError(error instanceof Error ? error.message : 'Impossible d'enregistrer cette entrée.');
         }
     };
 
@@ -323,9 +335,17 @@ const Budget: React.FC = () => {
             content: (
                 <div className="space-y-4">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                        <h3 className="text-h2 font-semibold">
-                            {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy', { locale: fr })}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => navigateMonth(-1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
+                                <ChevronLeft className="w-5 h-5" />
+                            </button>
+                            <h3 className="text-h2 font-semibold min-w-[160px] text-center">
+                                {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy', { locale: fr })}
+                            </h3>
+                            <button onClick={() => navigateMonth(1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
+                                <ChevronRight className="w-5 h-5" />
+                            </button>
+                        </div>
                         <div className="flex items-center gap-3 w-full sm:w-auto">
                             {familyMembers.length > 0 && (
                                 <Select
