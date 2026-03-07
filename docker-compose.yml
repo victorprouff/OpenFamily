@@ -39,6 +39,7 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       VAPID_SUBJECT: ${VAPID_SUBJECT}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
     expose:
       - "3001"
     depends_on:
@@ -60,6 +61,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
         VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:3001}
+        VITE_REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
     container_name: openfamily-client
     restart: unless-stopped
     expose:
