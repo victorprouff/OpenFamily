@@ -242,14 +242,16 @@ router.get('/statistics', async (req: AuthRequest, res) => {
          fm.id as family_member_id,
          fm.name as family_member_name,
          fm.color as family_member_color,
-         SUM(be.amount) as member_total
+         be.category,
+         SUM(be.amount) as amount
        FROM budget_entries be
        INNER JOIN family_members fm ON be.family_member_id = fm.id
        WHERE be.user_id = $1
          AND be.is_expense = true
          AND EXTRACT(MONTH FROM be.date) = $2
          AND EXTRACT(YEAR FROM be.date) = $3
-       GROUP BY fm.id, fm.name, fm.color`,
+       GROUP BY fm.id, fm.name, fm.color, be.category
+       ORDER BY fm.name, be.category`,
             [req.userId, parsedMonth, parsedYear]
         );
 
@@ -281,7 +283,8 @@ router.get('/statistics', async (req: AuthRequest, res) => {
                     family_member_id: row.family_member_id,
                     family_member_name: row.family_member_name,
                     family_member_color: row.family_member_color,
-                    member_total: toNumber(row.member_total),
+                    category: row.category,
+                    amount: toNumber(row.amount),
                 })),
             }
         });

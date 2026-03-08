@@ -38,7 +38,7 @@ interface BudgetStats {
     totalIncome: number;
     balance: number;
     byCategory: Array<{ category: string; category_total: number }>;
-    byMember: Array<{ family_member_id: string; family_member_name: string; family_member_color: string; member_total: number }>;
+    byMember: Array<{ family_member_id: string; family_member_name: string; family_member_color: string; category: string; amount: number }>;
 }
 
 interface MonthlyStats {
@@ -197,7 +197,7 @@ const Budget: React.FC = () => {
                     })),
                     byMember: (response.data.byMember || []).map((item) => ({
                         ...item,
-                        member_total: toNumber(item.member_total),
+                        amount: toNumber(item.amount),
                     })),
                 });
             }
@@ -541,28 +541,39 @@ const Budget: React.FC = () => {
                                     </Card>
                                 </div>
                             )}
-                            {stats.byMember && stats.byMember.length > 0 && (
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Dépenses par membre</CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={stats.byMember.map((m) => ({ name: m.family_member_name, montant: m.member_total, color: m.family_member_color }))}>
-                                                <CartesianGrid strokeDasharray="3 3" />
-                                                <XAxis dataKey="name" />
-                                                <YAxis />
-                                                <Tooltip />
-                                                <Bar dataKey="montant">
-                                                    {stats.byMember.map((m) => (
-                                                        <Cell key={m.family_member_id} fill={m.family_member_color} />
+                            {stats.byMember && stats.byMember.length > 0 && (() => {
+                                const memberMap = new Map<string, Record<string, string | number>>();
+                                stats.byMember.forEach((row) => {
+                                    if (!memberMap.has(row.family_member_id)) {
+                                        memberMap.set(row.family_member_id, { name: row.family_member_name });
+                                    }
+                                    const entry = memberMap.get(row.family_member_id)!;
+                                    entry[row.category] = (entry[row.category] as number || 0) + row.amount;
+                                });
+                                const memberChartData = Array.from(memberMap.values());
+                                const memberCategories = [...new Set(stats.byMember.map((r) => r.category))];
+                                return (
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>Dépenses par membre et catégorie</CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <ResponsiveContainer width="100%" height={300}>
+                                                <BarChart data={memberChartData}>
+                                                    <CartesianGrid strokeDasharray="3 3" />
+                                                    <XAxis dataKey="name" />
+                                                    <YAxis />
+                                                    <Tooltip formatter={(value: number) => `${value.toFixed(2)}€`} />
+                                                    <Legend />
+                                                    {memberCategories.map((cat, i) => (
+                                                        <Bar key={cat} dataKey={cat} stackId="a" fill={CHART_COLOR_PRESETS[i % CHART_COLOR_PRESETS.length]} />
                                                     ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </CardContent>
-                                </Card>
-                            )}
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })()}
 
                             {monthlyStats.length > 0 && (
                                 <Card>
