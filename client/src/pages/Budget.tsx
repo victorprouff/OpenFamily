@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Plus, TrendingUp, TrendingDown, DollarSign, Edit2, Trash2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Dialog, Input, Select, Textarea, Badge, Tabs } from '../components/ui';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { CHART_COLOR_PRESETS } from '../design/colorPresets';
@@ -41,6 +41,15 @@ interface BudgetStats {
     byMember: Array<{ family_member_id: string; family_member_name: string; family_member_color: string; member_total: number }>;
 }
 
+interface MonthlyStats {
+    month: number;
+    totalExpenses: number;
+    totalIncome: number;
+    balance: number;
+}
+
+const MONTH_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+
 const CATEGORIES = [
     { value: 'Alimentation', label: 'Alimentation' },
     { value: 'Santé', label: 'Santé' },
@@ -66,6 +75,7 @@ const Budget: React.FC = () => {
     const [entries, setEntries] = useState<BudgetEntry[]>([]);
     const [limits, setLimits] = useState<BudgetLimit[]>([]);
     const [stats, setStats] = useState<BudgetStats | null>(null);
+    const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([]);
     const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -99,6 +109,7 @@ const Budget: React.FC = () => {
         loadEntries(filterMemberId, currentMonth, currentYear);
         loadLimits(currentMonth, currentYear);
         loadStats(currentMonth, currentYear);
+        loadMonthlyStats(currentYear);
     }, [currentMonth, currentYear]);
 
     const loadFamilyMembers = async () => {
@@ -148,6 +159,24 @@ const Budget: React.FC = () => {
             }
         } catch (error) {
             console.error('Failed to load limits:', error);
+        }
+    };
+
+    const loadMonthlyStats = async (year = currentYear) => {
+        try {
+            const response = await api.get<{ success: boolean; data: MonthlyStats[] }>(
+                `/api/budget/statistics/monthly?year=${year}`
+            );
+            if (response.success) {
+                setMonthlyStats(response.data.map((item) => ({
+                    ...item,
+                    totalExpenses: toNumber(item.totalExpenses),
+                    totalIncome: toNumber(item.totalIncome),
+                    balance: toNumber(item.balance),
+                })));
+            }
+        } catch (error) {
+            console.error('Failed to load monthly stats:', error);
         }
     };
 
@@ -325,18 +354,7 @@ const Budget: React.FC = () => {
             label: 'Entrées',
             content: (
                 <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                            <button onClick={() => navigateMonth(-1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
-                                <ChevronLeft className="w-5 h-5" />
-                            </button>
-                            <h3 className="text-h2 font-semibold min-w-[160px] text-center">
-                                {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy', { locale: fr })}
-                            </h3>
-                            <button onClick={() => navigateMonth(1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
-                                <ChevronRight className="w-5 h-5" />
-                            </button>
-                        </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
                         <div className="flex items-center gap-2 flex-wrap">
                             {familyMembers.length > 0 && (
                                 <div className="flex items-center gap-1">
@@ -545,6 +563,31 @@ const Budget: React.FC = () => {
                                     </CardContent>
                                 </Card>
                             )}
+
+                            {monthlyStats.length > 0 && (
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Évolution mensuelle {currentYear}</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={monthlyStats.map((m) => ({
+                                                name: MONTH_SHORT[m.month - 1],
+                                                Dépenses: m.totalExpenses,
+                                                Revenus: m.totalIncome,
+                                            }))}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="name" />
+                                                <YAxis />
+                                                <Tooltip formatter={(value: number) => `${value.toFixed(2)}€`} />
+                                                <Legend />
+                                                <Bar dataKey="Dépenses" fill="#ef4444" />
+                                                <Bar dataKey="Revenus" fill="#10b981" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </CardContent>
+                                </Card>
+                            )}
                         </>
                     )}
                 </div>
@@ -621,6 +664,17 @@ const Budget: React.FC = () => {
                 <div>
                     <h1 className="text-h1 mb-1">Budget</h1>
                     <p className="text-muted-foreground text-body">Suivez vos dépenses et revenus</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => navigateMonth(-1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <h3 className="text-h2 font-semibold min-w-[160px] text-center">
+                        {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy', { locale: fr })}
+                    </h3>
+                    <button onClick={() => navigateMonth(1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
+                        <ChevronRight className="w-5 h-5" />
+                    </button>
                 </div>
             </div>
 
