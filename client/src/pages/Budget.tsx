@@ -593,6 +593,31 @@ const Budget: React.FC = () => {
                                     </CardContent>
                                 </Card>
                             )}
+
+                            {monthlyStats.length > 0 && (
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Évolution mensuelle {currentYear}</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={monthlyStats.map((m) => ({
+                                                name: MONTH_SHORT[m.month - 1],
+                                                Dépenses: m.totalExpenses,
+                                                Revenus: m.totalIncome,
+                                            }))}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="name" />
+                                                <YAxis />
+                                                <Tooltip formatter={(value: number) => `${value.toFixed(2)}€`} />
+                                                <Legend />
+                                                <Bar dataKey="Dépenses" fill="#ef4444" />
+                                                <Bar dataKey="Revenus" fill="#10b981" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </CardContent>
+                                </Card>
+                            )}
                         </>
                     )}
                 </div>
