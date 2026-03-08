@@ -33,20 +33,12 @@ interface BudgetLimit {
     year: number;
 }
 
-interface MemberStats {
-    assigned_to: string | null;
-    member_name: string;
-    member_color: string;
-    total_expenses: number;
-    total_income: number;
-}
-
 interface BudgetStats {
     totalExpenses: number;
     totalIncome: number;
     balance: number;
     byCategory: Array<{ category: string; category_total: number }>;
-    byMember: MemberStats[];
+    byMember: Array<{ assigned_to: string; member_name: string; member_color: string; category: string; amount: number }>;
 }
 
 interface MonthlyStats {
@@ -174,11 +166,8 @@ const Budget: React.FC = () => {
                         category_total: toNumber(item.category_total),
                     })),
                     byMember: (response.data.byMember || []).map((item) => ({
-                        assigned_to: item.assigned_to,
-                        member_name: item.member_name || 'Non assigné',
-                        member_color: item.member_color || '#94a3b8',
-                        total_expenses: toNumber(item.total_expenses),
-                        total_income: toNumber(item.total_income),
+                        ...item,
+                        amount: toNumber(item.amount),
                     })),
                 });
             }
@@ -557,59 +546,39 @@ const Budget: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Per-member breakdown */}
-                            {stats.byMember && stats.byMember.length > 0 && (
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center gap-2">
-                                            <Users className="h-5 w-5" />
-                                            Dépenses par membre
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="space-y-4">
-                                            {stats.byMember
-                                                .filter((m) => m.total_expenses > 0)
-                                                .sort((a, b) => b.total_expenses - a.total_expenses)
-                                                .map((member, index) => {
-                                                    const percentage = stats.totalExpenses > 0
-                                                        ? (member.total_expenses / stats.totalExpenses) * 100
-                                                        : 0;
-                                                    return (
-                                                        <div key={member.assigned_to || `unassigned-${index}`} className="space-y-2">
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div
-                                                                        className="w-3 h-3 rounded-full"
-                                                                        style={{ backgroundColor: member.member_color }}
-                                                                    />
-                                                                    <span className="text-body-sm font-medium">
-                                                                        {member.member_name}
-                                                                    </span>
-                                                                </div>
-                                                                <span className="text-body-sm font-bold text-red-600">
-                                                                    {member.total_expenses.toFixed(2)}€
-                                                                    <span className="text-muted-foreground font-normal ml-1">
-                                                                        ({percentage.toFixed(0)}%)
-                                                                    </span>
-                                                                </span>
-                                                            </div>
-                                                            <div className="w-full bg-surface-2 rounded-full h-2">
-                                                                <div
-                                                                    className="h-2 rounded-full transition-all"
-                                                                    style={{
-                                                                        width: `${percentage}%`,
-                                                                        backgroundColor: member.member_color,
-                                                                    }}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            )}
+                            {stats.byMember && stats.byMember.length > 0 && (() => {
+                                const memberMap = new Map<string, Record<string, string | number>>();
+                                stats.byMember.forEach((row) => {
+                                    if (!memberMap.has(row.assigned_to)) {
+                                        memberMap.set(row.assigned_to, { name: row.member_name });
+                                    }
+                                    const entry = memberMap.get(row.assigned_to)!;
+                                    entry[row.category] = (entry[row.category] as number || 0) + row.amount;
+                                });
+                                const memberChartData = Array.from(memberMap.values());
+                                const memberCategories = [...new Set(stats.byMember.map((r) => r.category))];
+                                return (
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>Dépenses par membre et catégorie</CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <ResponsiveContainer width="100%" height={300}>
+                                                <BarChart data={memberChartData}>
+                                                    <CartesianGrid strokeDasharray="3 3" />
+                                                    <XAxis dataKey="name" />
+                                                    <YAxis />
+                                                    <Tooltip formatter={(value: number) => `${value.toFixed(2)}€`} />
+                                                    <Legend />
+                                                    {memberCategories.map((cat, i) => (
+                                                        <Bar key={cat} dataKey={cat} stackId="a" fill={CHART_COLOR_PRESETS[i % CHART_COLOR_PRESETS.length]} />
+                                                    ))}
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })()}
 
                             {monthlyStats.length > 0 && (
                                 <Card>

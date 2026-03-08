@@ -116,7 +116,7 @@ router.put('/entries/:id', async (req: AuthRequest, res) => {
         const assignedToValue = assigned_to === '' || assigned_to === null ? null : assigned_to;
 
         const result = await query(
-            `UPDATE budget_entries 
+            `UPDATE budget_entries
        SET category = COALESCE($1, category),
            amount = COALESCE($2, amount),
            description = COALESCE($3, description),
@@ -241,43 +241,45 @@ router.get('/statistics', async (req: AuthRequest, res) => {
         }
 
         const result = await query(
-            `SELECT 
+            `SELECT
          category,
          SUM(amount) as category_total
-       FROM budget_entries 
-       WHERE user_id = $1 
+       FROM budget_entries
+       WHERE user_id = $1
          AND is_expense = true
-         AND EXTRACT(MONTH FROM date) = $2 
+         AND EXTRACT(MONTH FROM date) = $2
          AND EXTRACT(YEAR FROM date) = $3
        GROUP BY category`,
             [req.userId, parsedMonth, parsedYear]
         );
 
         const totals = await query(
-            `SELECT 
+            `SELECT
          SUM(amount) FILTER (WHERE is_expense = true) as total_expenses,
          SUM(amount) FILTER (WHERE is_expense = false) as total_income
-       FROM budget_entries 
-       WHERE user_id = $1 
-         AND EXTRACT(MONTH FROM date) = $2 
+       FROM budget_entries
+       WHERE user_id = $1
+         AND EXTRACT(MONTH FROM date) = $2
          AND EXTRACT(YEAR FROM date) = $3`,
             [req.userId, parsedMonth, parsedYear]
         );
 
-        // Per-member spending breakdown
+        // Per-member spending breakdown by category (for stacked bar chart)
         const byMember = await query(
-            `SELECT 
-         be.assigned_to,
+            `SELECT
+         fm.id as assigned_to,
          fm.name as member_name,
          fm.color as member_color,
-         SUM(be.amount) FILTER (WHERE be.is_expense = true) as total_expenses,
-         SUM(be.amount) FILTER (WHERE be.is_expense = false) as total_income
+         be.category,
+         SUM(be.amount) as amount
        FROM budget_entries be
-       LEFT JOIN family_members fm ON be.assigned_to = fm.id
-       WHERE be.user_id = $1 
-         AND EXTRACT(MONTH FROM be.date) = $2 
+       INNER JOIN family_members fm ON be.assigned_to = fm.id
+       WHERE be.user_id = $1
+         AND be.is_expense = true
+         AND EXTRACT(MONTH FROM be.date) = $2
          AND EXTRACT(YEAR FROM be.date) = $3
-       GROUP BY be.assigned_to, fm.name, fm.color`,
+       GROUP BY fm.id, fm.name, fm.color, be.category
+       ORDER BY fm.name, be.category`,
             [req.userId, parsedMonth, parsedYear]
         );
 
@@ -296,10 +298,10 @@ router.get('/statistics', async (req: AuthRequest, res) => {
                 })),
                 byMember: byMember.rows.map((row) => ({
                     assigned_to: row.assigned_to,
-                    member_name: row.member_name || 'Non assigné',
-                    member_color: row.member_color || '#94a3b8',
-                    total_expenses: toNumber(row.total_expenses),
-                    total_income: toNumber(row.total_income),
+                    member_name: row.member_name,
+                    member_color: row.member_color,
+                    category: row.category,
+                    amount: toNumber(row.amount),
                 })),
             }
         });
