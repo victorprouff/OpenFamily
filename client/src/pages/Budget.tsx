@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Plus, TrendingUp, TrendingDown, DollarSign, Edit2, Trash2, AlertCircle, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Dialog, Input, Select, Textarea, Badge, Tabs } from '../components/ui';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { CHART_COLOR_PRESETS } from '../design/colorPresets';
@@ -49,6 +49,15 @@ interface BudgetStats {
     byMember: MemberStats[];
 }
 
+interface MonthlyStats {
+    month: number;
+    totalExpenses: number;
+    totalIncome: number;
+    balance: number;
+}
+
+const MONTH_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+
 const CATEGORIES = [
     { value: 'Alimentation', label: 'Alimentation' },
     { value: 'Santé', label: 'Santé' },
@@ -74,6 +83,7 @@ const Budget: React.FC = () => {
     const [entries, setEntries] = useState<BudgetEntry[]>([]);
     const [limits, setLimits] = useState<BudgetLimit[]>([]);
     const [stats, setStats] = useState<BudgetStats | null>(null);
+    const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([]);
     const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -107,6 +117,7 @@ const Budget: React.FC = () => {
         loadEntries();
         loadLimits();
         loadStats();
+        loadMonthlyStats(currentYear);
     }, [currentMonth, currentYear]);
 
     const loadEntries = async () => {
@@ -173,6 +184,24 @@ const Budget: React.FC = () => {
             }
         } catch (error) {
             console.error('Failed to load stats:', error);
+        }
+    };
+
+    const loadMonthlyStats = async (year = currentYear) => {
+        try {
+            const response = await api.get<{ success: boolean; data: MonthlyStats[] }>(
+                `/api/budget/statistics/monthly?year=${year}`
+            );
+            if (response.success) {
+                setMonthlyStats(response.data.map((item) => ({
+                    ...item,
+                    totalExpenses: toNumber(item.totalExpenses),
+                    totalIncome: toNumber(item.totalIncome),
+                    balance: toNumber(item.balance),
+                })));
+            }
+        } catch (error) {
+            console.error('Failed to load monthly stats:', error);
         }
     };
 
@@ -578,6 +607,31 @@ const Budget: React.FC = () => {
                                                     );
                                                 })}
                                         </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {monthlyStats.length > 0 && (
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Évolution mensuelle {currentYear}</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={monthlyStats.map((m) => ({
+                                                name: MONTH_SHORT[m.month - 1],
+                                                Dépenses: m.totalExpenses,
+                                                Revenus: m.totalIncome,
+                                            }))}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="name" />
+                                                <YAxis />
+                                                <Tooltip formatter={(value: number) => `${value.toFixed(2)}€`} />
+                                                <Legend />
+                                                <Bar dataKey="Dépenses" fill="#ef4444" />
+                                                <Bar dataKey="Revenus" fill="#10b981" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
                                     </CardContent>
                                 </Card>
                             )}

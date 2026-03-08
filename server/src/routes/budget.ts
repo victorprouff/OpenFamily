@@ -309,4 +309,45 @@ router.get('/statistics', async (req: AuthRequest, res) => {
     }
 });
 
+// Get monthly budget statistics for a year
+router.get('/statistics/monthly', async (req: AuthRequest, res) => {
+    try {
+        const { year } = req.query;
+        const parsedYear = toOptionalNumber(year);
+
+        if (parsedYear === null) {
+            return res.status(400).json({ success: false, error: 'year is required' });
+        }
+
+        const result = await query(
+            `SELECT
+         EXTRACT(MONTH FROM date)::int as month,
+         SUM(amount) FILTER (WHERE is_expense = true) as total_expenses,
+         SUM(amount) FILTER (WHERE is_expense = false) as total_income
+       FROM budget_entries
+       WHERE user_id = $1
+         AND EXTRACT(YEAR FROM date) = $2
+       GROUP BY EXTRACT(MONTH FROM date)
+       ORDER BY month`,
+            [req.userId, parsedYear]
+        );
+
+        const monthlyData = Array.from({ length: 12 }, (_, i) => {
+            const monthNum = i + 1;
+            const row = result.rows.find((r) => r.month === monthNum);
+            return {
+                month: monthNum,
+                totalExpenses: row ? toNumber(row.total_expenses) : 0,
+                totalIncome: row ? toNumber(row.total_income) : 0,
+                balance: row ? toNumber(row.total_income) - toNumber(row.total_expenses) : 0,
+            };
+        });
+
+        res.json({ success: true, data: monthlyData });
+    } catch (error) {
+        console.error('Get monthly budget statistics error:', error);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
 export default router;
