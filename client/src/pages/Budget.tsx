@@ -240,7 +240,7 @@ const Budget: React.FC = () => {
             loadStats();
         } catch (error) {
             console.error('Failed to save entry:', error);
-            setFormError(error instanceof Error ? error.message : 'Impossible d'enregistrer cette entrée.');
+            setFormError(error instanceof Error ? error.message : "Impossible d'enregistrer cette entrée.");
         }
     };
 
