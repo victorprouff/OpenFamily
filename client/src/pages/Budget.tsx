@@ -352,19 +352,8 @@ const Budget: React.FC = () => {
             label: 'Entrées',
             content: (
                 <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2">
-                            <button onClick={() => navigateMonth(-1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
-                                <ChevronLeft className="w-5 h-5" />
-                            </button>
-                            <h3 className="text-h2 font-semibold min-w-[160px] text-center">
-                                {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy', { locale: fr })}
-                            </h3>
-                            <button onClick={() => navigateMonth(1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
-                                <ChevronRight className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="flex items-center gap-3 w-full sm:w-auto">
                             {familyMembers.length > 0 && (
                                 <Select
                                     value={filterMember}
@@ -376,11 +365,11 @@ const Budget: React.FC = () => {
                                     ]}
                                 />
                             )}
-                            <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
-                                <Plus className="w-4 h-4 mr-2" />
-                                Nouvelle entrée
-                            </Button>
                         </div>
+                        <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
+                            <Plus className="w-4 h-4 mr-2" />
+                            Nouvelle entrée
+                        </Button>
                     </div>
 
                     <div className="space-y-3">
@@ -680,6 +669,17 @@ const Budget: React.FC = () => {
                 <div>
                     <h1 className="text-h1 mb-1">Budget</h1>
                     <p className="text-muted-foreground text-body">Suivez vos dépenses et revenus</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => navigateMonth(-1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <span className="text-h2 font-semibold min-w-[160px] text-center">
+                        {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy', { locale: fr })}
+                    </span>
+                    <button onClick={() => navigateMonth(1)} className="p-1 rounded hover:bg-surface-2 transition-colors">
+                        <ChevronRight className="w-5 h-5" />
+                    </button>
                 </div>
             </div>
 
