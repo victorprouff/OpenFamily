@@ -5,6 +5,15 @@ import { toNullIfEmpty, toOptionalNumber } from '../lib/normalize';
 
 const router = Router();
 
+// pg returns NUMERIC columns as strings; normalize them to JS numbers
+function parseRow(row: Record<string, unknown>) {
+    return {
+        ...row,
+        price: row.price != null ? parseFloat(row.price as string) : null,
+        quantity: row.quantity != null ? parseFloat(row.quantity as string) : null,
+    };
+}
+
 // All routes require authentication
 router.use(authMiddleware);
 
@@ -15,7 +24,7 @@ router.get('/', async (req: AuthRequest, res) => {
             'SELECT * FROM shopping_items WHERE user_id = $1 ORDER BY created_at DESC',
             [req.userId]
         );
-        res.json({ success: true, data: result.rows });
+        res.json({ success: true, data: result.rows.map(parseRow) });
     } catch (error) {
         console.error('Get shopping items error:', error);
         res.status(500).json({ success: false, error: 'Internal server error' });
@@ -57,7 +66,7 @@ router.post('/', async (req: AuthRequest, res) => {
             ]
         );
 
-        res.json({ success: true, data: result.rows[0] });
+        res.json({ success: true, data: parseRow(result.rows[0]) });
     } catch (error) {
         console.error('Create shopping item error:', error);
         res.status(500).json({ success: false, error: 'Internal server error' });
@@ -110,7 +119,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
             return res.status(404).json({ success: false, error: 'Item not found' });
         }
 
-        res.json({ success: true, data: result.rows[0] });
+        res.json({ success: true, data: parseRow(result.rows[0]) });
     } catch (error) {
         console.error('Update shopping item error:', error);
         res.status(500).json({ success: false, error: 'Internal server error' });
