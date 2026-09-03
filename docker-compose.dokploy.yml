@@ -1,0 +1,108 @@
+# Déploiement Dokploy — fichier AUTOPORTANT.
+#
+# Dans Dokploy, renseigner ce fichier comme Compose Path :
+#   ./docker-compose.dokploy.yml
+#
+# Pourquoi une copie de docker-compose.yml plutôt qu'une surcharge :
+#  - Dokploy ne passe qu'UN seul fichier à `docker compose -f` (la syntaxe
+#    `a.yml:b.yml` n'est pas supportée) ;
+#  - il parse ce fichier lui-même pour lister les services auxquels attacher un
+#    domaine, ce qui exclut `include:` (aucun service visible) ;
+#  - `extends` + `ports: !override []` ne marche pas non plus : la directive
+#    !override relève de la fusion de fichiers et le compose embarqué par
+#    Dokploy (v5.3.0) l'ignore sur ce chemin de code, si bien que le `3000:80`
+#    amont réapparaissait et entrait en collision avec l'UI Dokploy (port 3000).
+#
+# ⚠️ À RESYNCHRONISER manuellement après chaque mise à jour de l'upstream :
+#    diff docker-compose.yml docker-compose.dokploy.yml
+#
+# Seul écart avec docker-compose.yml : `expose` au lieu de `ports`. Traefik
+# atteint les conteneurs par le réseau Docker, rien ne doit être publié sur
+# l'hôte (surtout pas Postgres).
+#
+# VITE_API_URL / VITE_WS_URL restent vides : nginx (client/nginx.conf) proxifie
+# /api et /ws vers le serveur en same-origin.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: openfamily-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-openfamily}
+      POSTGRES_USER: ${POSTGRES_USER:-openfamily}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    expose:
+      - "5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./server/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openfamily}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: ./server/Dockerfile
+    container_name: openfamily-server
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-openfamily}
+      POSTGRES_USER: ${POSTGRES_USER:-openfamily}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      SERVER_PORT: 3001
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_SUBJECT: ${VAPID_SUBJECT}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
+    expose:
+      - "3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3001/health >/dev/null 2>&1 || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - ./server/uploads:/app/uploads
+
+  client:
+    build:
+      context: .
+      dockerfile: ./client/Dockerfile
+      args:
+        # Empty → same-origin; nginx proxies /api and /ws to the server, so the app
+        # works from any device. Set these only to serve the API from a separate origin.
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_WS_URL: ${VITE_WS_URL:-}
+        # Same flag as the server's REGISTRATION_ENABLED: hides the "Sign up"
+        # link so the UI matches what the API accepts.
+        VITE_REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
+    container_name: openfamily-client
+    restart: unless-stopped
+    expose:
+      - "80"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1 >/dev/null 2>&1 || exit 1" ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres-data:
+    driver: local
