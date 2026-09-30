@@ -52,7 +52,8 @@
     "title": "Export data",
     "subtitle": "Download all your data (budget, tasks, recipes, members, shopping, appointments, planning, meals) as a JSON file.",
     "button": "Export",
-    "inProgress": "Exporting…"
+    "inProgress": "Exporting…",
+    "budgetButton": "Export budget only"
   },
   "import": {
     "title": "Import data",

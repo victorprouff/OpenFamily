@@ -52,7 +52,8 @@
     "title": "导出数据",
     "subtitle": "将所有数据（预算、任务、食谱、成员、购物、日程、计划、餐食）下载为 JSON 文件。",
     "button": "导出",
-    "inProgress": "正在导出……"
+    "inProgress": "正在导出……",
+    "budgetButton": "仅导出预算"
   },
   "import": {
     "title": "导入数据",

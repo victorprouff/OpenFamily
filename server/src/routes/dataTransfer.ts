@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getClient, query } from '../db';
 import { authMiddleware, requireParent, AuthRequest } from '../middleware/auth';
+import { getFamilyCategories } from './categories';
 
 // Explicit per-table column whitelist matching the export format. `id` stays allowed
 // (UUIDs preserve relation integrity and let ON CONFLICT DO NOTHING deduplicate);
@@ -83,6 +84,69 @@ router.get('/export', async (req: AuthRequest, res) => {
         res.json({ success: true, data: exportData });
     } catch (error) {
         console.error('Export error:', error);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// Export the budget only, in a self-describing format meant to be imported by
+// another app: categories and members are carried by name (not only by id),
+// amounts come both as decimals and integer cents, dates as 'YYYY-MM-DD'.
+// Income entries (is_expense = false) are left out.
+router.get('/export/budget', async (req: AuthRequest, res) => {
+    try {
+        const userId = req.userId!;
+
+        const [categories, owner, members, expenses, recurring] = await Promise.all([
+            getFamilyCategories(userId),
+            query('SELECT currency FROM users WHERE id = $1', [userId]),
+            query('SELECT id, name FROM family_members WHERE user_id = $1 ORDER BY name', [userId]),
+            // to_char avoids node-pg turning DATE into a local-time Date (off-by-one days).
+            query(
+                `SELECT be.id,
+                        to_char(be.date, 'YYYY-MM-DD') AS date,
+                        be.amount::float8 AS amount,
+                        ROUND(be.amount * 100)::int AS amount_cents,
+                        be.category,
+                        be.description,
+                        be.assigned_to AS member_id,
+                        fm.name AS member_name,
+                        be.created_at
+                 FROM budget_entries be
+                 LEFT JOIN family_members fm ON fm.id = be.assigned_to
+                 WHERE be.user_id = $1 AND be.is_expense = true
+                 ORDER BY be.date, be.created_at`,
+                [userId]
+            ),
+            // A recurring debit counts for every month from its creation month on,
+            // hence start_month.
+            query(
+                `SELECT id, label,
+                        amount::float8 AS amount,
+                        ROUND(amount * 100)::int AS amount_cents,
+                        category, debit_day, is_active,
+                        to_char(created_at, 'YYYY-MM') AS start_month
+                 FROM recurring_expenses
+                 WHERE user_id = $1
+                 ORDER BY created_at`,
+                [userId]
+            ),
+        ]);
+
+        res.json({
+            success: true,
+            data: {
+                format: 'openfamily-budget',
+                version: 1,
+                exportedAt: new Date().toISOString(),
+                currency: owner.rows[0]?.currency ?? 'EUR',
+                categories: categories.budget,
+                members: members.rows,
+                expenses: expenses.rows,
+                recurring_expenses: recurring.rows,
+            },
+        });
+    } catch (error) {
+        console.error('Budget export error:', error);
         res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });

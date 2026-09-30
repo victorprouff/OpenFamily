@@ -758,6 +758,12 @@ async function route(method: string, path: string, q: Record<string, string>, bo
 
     // ── Data export/import ──────────────────────────────────────────────────────
     if (path === '/api/data/export') return ok(store);
+    if (path === '/api/data/export/budget') {
+        return ok({
+            format: 'openfamily-budget', version: 1, exportedAt: new Date().toISOString(),
+            members: store.familyMembers, expenses: store.budgetEntries, recurring_expenses: store.budgetRecurring,
+        });
+    }
     if (path === '/api/data/import') return ok({ imported: {} });
 
     // Fallback: empty success so the UI never crashes in the demo.
