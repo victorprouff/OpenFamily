@@ -52,7 +52,8 @@
     "title": "Exportar dados",
     "subtitle": "Baixe todos os seus dados (orçamento, tarefas, receitas, membros, compras, compromissos, rotinas, refeições) em um arquivo JSON.",
     "button": "Exportar",
-    "inProgress": "Exportando…"
+    "inProgress": "Exportando…",
+    "budgetButton": "Exportar só o orçamento"
   },
   "import": {
     "title": "Importar dados",

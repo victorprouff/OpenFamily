@@ -746,18 +746,18 @@ const Settings: React.FC = () => {
         }
     };
 
-    const handleExport = async () => {
+    const handleExport = async (path: string, filePrefix: string) => {
         setExportLoading(true);
         setExportError('');
         try {
-            const response = await api.get<{ success: boolean; data: unknown }>('/api/data/export');
+            const response = await api.get<{ success: boolean; data: unknown }>(path);
             const blob = new Blob([JSON.stringify(response.data, null, 2)], {
                 type: 'application/json',
             });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `openfamily-export-${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `${filePrefix}-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {
@@ -1081,18 +1081,27 @@ const Settings: React.FC = () => {
                                     {exportError}
                                 </p>
                             )}
-                            <Button
-                                className="mt-4"
-                                onClick={handleExport}
-                                disabled={exportLoading}
-                            >
-                                {exportLoading ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                <Button
+                                    onClick={() => handleExport('/api/data/export', 'openfamily-export')}
+                                    disabled={exportLoading}
+                                >
+                                    {exportLoading ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Download className="mr-2 h-4 w-4" />
+                                    )}
+                                    {exportLoading ? t('settings:export.inProgress') : t('settings:export.button')}
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => handleExport('/api/data/export/budget', 'openfamily-budget')}
+                                    disabled={exportLoading}
+                                >
                                     <Download className="mr-2 h-4 w-4" />
-                                )}
-                                {exportLoading ? t('settings:export.inProgress') : t('settings:export.button')}
-                            </Button>
+                                    {t('settings:export.budgetButton')}
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </CardContent>
